@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schedule Manager</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="card home-card">
+            <h1>Schedule Manager</h1>
+            <p class="subtitle">Upload your university advising slip (Excel) to generate a class routine</p>
+
+            {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="alert">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <form action="{{ url_for('upload_file') }}" method="post" enctype="multipart/form-data" class="upload-form">
+                <div class="file-input-wrapper">
+                    <input type="file" name="file" accept=".xlsx,.xls" id="file-input" class="file-input">
+                    <label for="file-input" class="file-label">Choose Excel File</label>
+                    <span id="file-name">No file selected</span>
+                </div>
+                <button type="submit" class="btn">Generate Schedule</button>
+            </form>
+
+            <div class="info">
+                <p><strong>Supported format:</strong> University advising slip (.xlsx)</p>
+                <p>The file should contain columns: Course(s), Sec, Time-WeekDay, Room</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        Developed by Ratul Hasan Nirjon
+    </div>
+
+    <script>
+        document.getElementById('file-input').addEventListener('change', function(e) {
+            var name = e.target.files[0] ? e.target.files[0].name : 'No file selected';
+            document.getElementById('file-name').textContent = name;
+        });
+    </script>
+</body>
+</html>

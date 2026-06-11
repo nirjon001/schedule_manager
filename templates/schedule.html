@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Class Schedule - {{ student.name }}</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="header">
+                <div>
+                    <h1>Class Routine</h1>
+                    <p class="student-info">
+                        <strong>{{ student.name }}</strong> &mdash; {{ student.id }}
+                        <span class="semester">{{ student.semester }}</span>
+                    </p>
+                </div>
+                <div class="actions">
+                    <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline">&larr; New</a>
+                    <a href="{{ url_for('download_pdf', file_id=file_id) }}" class="btn btn-sm download-btn" id="pdf-btn">Download PDF</a>
+                    <a href="{{ url_for('download_image', file_id=file_id) }}" class="btn btn-sm download-btn" id="img-btn">Download Image</a>
+                </div>
+            </div>
+
+            <div class="faculty-bar">
+                <span class="faculty-bar-title">Faculty Initials:</span>
+                {% for c in unique_courses %}
+                    <div class="faculty-item">
+                        <label for="faculty-{{ loop.index0 }}">{{ c.course }}</label>
+                        <input type="text" id="faculty-{{ loop.index0 }}" class="faculty-input" data-course="{{ c.course }}" placeholder="e.g. RH" maxlength="10">
+                    </div>
+                {% endfor %}
+            </div>
+
+            <div style="overflow-x: auto;">
+                <table class="grid-table">
+                    <thead>
+                        <tr>
+                            <th class="time-col-head">Time</th>
+                            {% for day in active_days %}
+                                <th class="day-col-head day-head-{{ day|lower }}">{{ day }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in grid_rows %}
+                            <tr>
+                                <td class="time-col">{{ row.start }} - {{ row.end }}</td>
+                                {% for day in active_days %}
+                                    {% set course = row.courses.get(day) %}
+                                    <td class="day-col day-cell-{{ day|lower }}">
+                                        {% if course %}
+                                            <div class="course-block" data-course="{{ course.course }}">
+                                                <span class="course-code">{{ course.course }}</span>
+                                                {% if course.sec %}
+                                                    <span class="course-sec" data-sec="{{ course.sec }}" data-course="{{ course.course }}">Sec-{{ course.sec }}</span>
+                                                {% endif %}
+                                                <span class="course-room">{{ course.room }}</span>
+                                            </div>
+                                        {% endif %}
+                                    </td>
+                                {% endfor %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if not active_days %}
+                <p class="no-data">No schedule data found.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="footer">
+        Developed by Ratul Hasan Nirjon
+    </div>
+
+    <script>
+        function buildFacultyMap() {
+            var map = {};
+            var inputs = document.querySelectorAll('.faculty-input');
+            for (var i = 0; i < inputs.length; i++) {
+                var val = inputs[i].value.trim().toUpperCase();
+                if (val) {
+                    map[inputs[i].getAttribute('data-course')] = val;
+                }
+            }
+            return map;
+        }
+
+        function updateDisplay() {
+            var map = buildFacultyMap();
+            var secs = document.querySelectorAll('.course-sec');
+            for (var i = 0; i < secs.length; i++) {
+                var s = secs[i];
+                var secNum = s.getAttribute('data-sec');
+                var course = s.getAttribute('data-course');
+                var f = map[course] || '';
+                if (f) {
+                    s.textContent = 'Sec-' + secNum + '(' + f + ')';
+                } else {
+                    s.textContent = 'Sec-' + secNum;
+                }
+            }
+        }
+
+        function updateDownloadLinks() {
+            var map = buildFacultyMap();
+            var json = Object.keys(map).length ? JSON.stringify(map) : '';
+            var pdfBtn = document.getElementById('pdf-btn');
+            var imgBtn = document.getElementById('img-btn');
+            var basePdf = pdfBtn.href.split('?')[0];
+            var baseImg = imgBtn.href.split('?')[0];
+            pdfBtn.href = json ? basePdf + '?faculty=' + encodeURIComponent(json) : basePdf;
+            imgBtn.href = json ? baseImg + '?faculty=' + encodeURIComponent(json) : baseImg;
+        }
+
+        function onFacultyChange() {
+            updateDisplay();
+            updateDownloadLinks();
+        }
+
+        var inputs = document.querySelectorAll('.faculty-input');
+        for (var i = 0; i < inputs.length; i++) {
+            inputs[i].addEventListener('input', onFacultyChange);
+        }
+    </script>
+</body>
+</html>
