@@ -25,14 +25,27 @@
                 </div>
             </div>
 
+            <div class="live-status">
+                <div class="live-clock">
+                    <span id="clock-display">--:--:--</span>
+                    <span id="date-display">---</span>
+                </div>
+                <div id="current-info" class="current-info">Loading...</div>
+            </div>
+
             <div class="faculty-bar">
-                <span class="faculty-bar-title">Faculty Initials:</span>
-                {% for c in unique_courses %}
-                    <div class="faculty-item">
-                        <label for="faculty-{{ loop.index0 }}">{{ c.course }}</label>
-                        <input type="text" id="faculty-{{ loop.index0 }}" class="faculty-input" data-course="{{ c.course }}" placeholder="e.g. RH" maxlength="10">
-                    </div>
-                {% endfor %}
+                <div class="faculty-bar-header">
+                    <span class="faculty-bar-title">Faculty Initials</span>
+                    <span class="faculty-toggle">&#9660;</span>
+                </div>
+                <div class="faculty-bar-body">
+                    {% for c in unique_courses %}
+                        <div class="faculty-item">
+                            <label for="faculty-{{ loop.index0 }}">{{ c.course }}</label>
+                            <input type="text" id="faculty-{{ loop.index0 }}" class="faculty-input" data-course="{{ c.course }}" placeholder="e.g. RH" maxlength="10">
+                        </div>
+                    {% endfor %}
+                </div>
             </div>
 
             <div style="overflow-x: auto;">
@@ -48,12 +61,12 @@
                     </thead>
                     <tbody>
                         {% for row in grid_rows %}
-                            <tr>
+                            <tr data-day="{{ row.day }}">
                                 <td class="day-name-col">{{ row.day }}</td>
                                 {% for ts in time_slots %}
                                     {% set course = row.courses.get(ts) %}
                                     {% set bg = colors_light[loop.index0 % (colors_light | length)] %}
-                                    <td class="day-col" style="background: {{ bg }};">
+                                    <td class="day-col" style="background: {{ bg }};" data-start="{{ ts[0] }}" data-end="{{ ts[1] }}">
                                         {% if course %}
                                             <div class="course-block" data-course="{{ course.course }}">
                                                 <span class="course-code">{{ course.course }}</span>
@@ -82,6 +95,55 @@
     </div>
 
     <script>
+        var scheduleByDay = {{ schedule | tojson }};
+
+        var DAY_MAP = {
+            0: 'Sunday', 1: 'Monday', 2: 'Tuesday', 3: 'Wednesday',
+            4: 'Thursday', 5: 'Friday', 6: 'Saturday'
+        };
+
+        var DAY_INDEX = { 'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3,
+                         'Thursday': 4, 'Friday': 5, 'Saturday': 6 };
+
+        function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+        function parseTime(str) {
+            var m = str.match(/(\d{1,2}):(\d{2})(AM|PM)/);
+            if (!m) return 0;
+            var h = parseInt(m[1]), min = parseInt(m[2]);
+            if (m[3] === 'PM' && h !== 12) h += 12;
+            if (m[3] === 'AM' && h === 12) h = 0;
+            return h * 60 + min;
+        }
+
+        function getNow() {
+            var d = new Date();
+            return {
+                hours: d.getHours(),
+                minutes: d.getMinutes(),
+                seconds: d.getSeconds(),
+                totalMin: d.getHours() * 60 + d.getMinutes(),
+                dayIndex: d.getDay(),
+                dayName: DAY_MAP[d.getDay()],
+                date: d
+            };
+        }
+
+        function formatTime12(h, m, s) {
+            var ampm = h >= 12 ? 'PM' : 'AM';
+            var h12 = h % 12 || 12;
+            return h12 + ':' + pad(m) + ':' + pad(s) + ' ' + ampm;
+        }
+
+        function updateClock() {
+            var now = getNow();
+            document.getElementById('clock-display').textContent = formatTime12(now.hours, now.minutes, now.seconds);
+            var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+            var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+            var d = now.date;
+            document.getElementById('date-display').textContent = days[d.getDay()] + ', ' + months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+        }
+
         function buildFacultyMap() {
             var map = {};
             var inputs = document.querySelectorAll('.faculty-input');
@@ -130,6 +192,109 @@
         for (var i = 0; i < inputs.length; i++) {
             inputs[i].addEventListener('input', onFacultyChange);
         }
+
+        var facultyBar = document.querySelector('.faculty-bar');
+        var facultyHeader = document.querySelector('.faculty-bar-header');
+        facultyBar.classList.add('collapsed');
+        facultyHeader.addEventListener('click', function() {
+            facultyBar.classList.toggle('collapsed');
+        });
+
+        function updateCurrentClass() {
+            var now = getNow();
+            var todayName = now.dayName;
+            var todayCourses = scheduleByDay[todayName] || [];
+            var prevClass = null, currentClass = null, nextClass = null;
+
+            todayCourses.sort(function(a, b) {
+                return parseTime(a.start) - parseTime(b.start);
+            });
+
+            for (var i = 0; i < todayCourses.length; i++) {
+                var c = todayCourses[i];
+                var sm = parseTime(c.start);
+                var em = parseTime(c.end);
+                if (now.totalMin >= sm && now.totalMin <= em) {
+                    currentClass = c;
+                } else if (now.totalMin < sm) {
+                    nextClass = c;
+                    break;
+                }
+                if (now.totalMin > em) {
+                    prevClass = c;
+                }
+            }
+
+            var infoEl = document.getElementById('current-info');
+            var html = '';
+
+            if (currentClass) {
+                var label = currentClass.course;
+                if (currentClass.sec) label += ' Sec-' + currentClass.sec;
+                html = '<span class="highlight">&#9654; ' + label + '</span> &mdash; ' + currentClass.room;
+            } else if (todayCourses.length === 0) {
+                html = '&#10003; No classes today';
+            } else if (nextClass) {
+                var gap = parseTime(nextClass.start) - now.totalMin;
+                var gapH = Math.floor(gap / 60);
+                var gapM = gap % 60;
+                var gapStr = gapH > 0 ? gapH + 'h ' + gapM + 'm' : gapM + ' min';
+                var label = nextClass.course;
+                if (nextClass.sec) label += ' Sec-' + nextClass.sec;
+                html = '<span class="gap">&#9201; Gap: ' + gapStr + '</span> &rarr; ' + label + ' at ' + nextClass.start;
+                if (prevClass) {
+                    html = '<span class="gap">&#9201; Gap: ' + gapStr + '</span> after last class &rarr; ' + label;
+                }
+            } else {
+                html = '&#10003; All classes done for today';
+            }
+
+            infoEl.innerHTML = html;
+        }
+
+        function highlightToday() {
+            var now = getNow();
+            var todayName = now.dayName;
+            var todayCourses = scheduleByDay[todayName] || [];
+            var rows = document.querySelectorAll('tr[data-day]');
+
+            document.querySelectorAll('.today-row').forEach(function(r) { r.classList.remove('today-row'); });
+            document.querySelectorAll('.current-class').forEach(function(r) { r.classList.remove('current-class'); });
+
+            for (var i = 0; i < rows.length; i++) {
+                var row = rows[i];
+                if (row.getAttribute('data-day') === todayName && todayCourses.length > 0) {
+                    row.classList.add('today-row');
+
+                    var cells = row.querySelectorAll('td[data-start]');
+                    var bestCell = null;
+                    var bestStart = -1;
+                    for (var j = 0; j < cells.length; j++) {
+                        var cell = cells[j];
+                        var sm = parseTime(cell.getAttribute('data-start'));
+                        var em = parseTime(cell.getAttribute('data-end'));
+                        if (now.totalMin >= sm && now.totalMin <= em && cell.querySelector('.course-block')) {
+                            if (sm > bestStart) {
+                                bestStart = sm;
+                                bestCell = cell;
+                            }
+                        }
+                    }
+                    if (bestCell) {
+                        bestCell.classList.add('current-class');
+                    }
+                }
+            }
+        }
+
+        function tick() {
+            updateClock();
+            updateCurrentClass();
+            highlightToday();
+        }
+
+        tick();
+        setInterval(tick, 1000);
     </script>
 </body>
 </html>
