@@ -61,6 +61,9 @@ DAY_COLORS = {
     'Saturday': '#E0F7FA',
 }
 
+COLORS_LIGHT = ['#E3F2FD', '#F3E5F5', '#E8F5E9', '#FFF3E0', '#FCE4EC', '#F5F5F5', '#E0F7FA']
+COLORS_DARK = ['#BBDEFB', '#E1BEE7', '#C8E6C9', '#FFE0B2', '#F8BBD0', '#E0E0E0', '#B2EBF2']
+
 DAY_SHORT = {
     'Sunday': 'Sun',
     'Monday': 'Mon',
@@ -115,12 +118,12 @@ def upload_file():
         if not schedule:
             flash('Could not find any course schedule in the file')
             return redirect(url_for('index'))
-        active_days, grid_rows = build_grid(schedule)
+        active_days, time_slots, grid_rows = build_grid(schedule)
         unique_courses = []
         seen = set()
         for row in grid_rows:
-            for day in active_days:
-                c = row['courses'].get(day)
+            for ts in time_slots:
+                c = row['courses'].get(ts)
                 if c and c['course'] not in seen:
                     seen.add(c['course'])
                     unique_courses.append(c)
@@ -128,9 +131,12 @@ def upload_file():
                                student=student_info,
                                schedule=schedule,
                                active_days=active_days,
+                               time_slots=time_slots,
                                grid_rows=grid_rows,
                                day_short=DAY_SHORT,
                                day_colors=DAY_COLORS,
+                               colors_light=COLORS_LIGHT,
+                               colors_dark=COLORS_DARK,
                                file_id=file_id,
                                unique_courses=unique_courses)
     except Exception as e:
@@ -150,13 +156,13 @@ def download_pdf(file_id):
             return redirect(url_for('index'))
 
     student_info, schedule = process_file(filepath)
-    active_days, grid_rows = build_grid(schedule)
+    active_days, time_slots, grid_rows = build_grid(schedule)
     faculty_raw = request.args.get('faculty', '')
     try:
         faculty_map = json.loads(faculty_raw) if faculty_raw else {}
     except (json.JSONDecodeError, TypeError):
         faculty_map = {}
-    buf = generate_pdf(student_info, active_days, grid_rows, faculty_map)
+    buf = generate_pdf(student_info, active_days, time_slots, grid_rows, faculty_map)
     return send_file(buf, mimetype='application/pdf',
                      as_attachment=True,
                      download_name=f'schedule_{student_info["name"] or "routine"}.pdf')
@@ -174,13 +180,13 @@ def download_image(file_id):
             return redirect(url_for('index'))
 
     student_info, schedule = process_file(filepath)
-    active_days, grid_rows = build_grid(schedule)
+    active_days, time_slots, grid_rows = build_grid(schedule)
     faculty_raw = request.args.get('faculty', '')
     try:
         faculty_map = json.loads(faculty_raw) if faculty_raw else {}
     except (json.JSONDecodeError, TypeError):
         faculty_map = {}
-    buf = generate_image(student_info, active_days, grid_rows, faculty_map)
+    buf = generate_image(student_info, active_days, time_slots, grid_rows, faculty_map)
     return send_file(buf, mimetype='image/png',
                      as_attachment=True,
                      download_name=f'schedule_{student_info["name"] or "routine"}.png')
@@ -203,7 +209,7 @@ def make_cell_text(c, faculty_map):
     parts.append(c['room'])
     return '<br/>'.join(parts)
 
-def generate_pdf(student_info, active_days, grid_rows, faculty_map={}):
+def generate_pdf(student_info, active_days, time_slots, grid_rows, faculty_map={}):
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
                             leftMargin=15*mm, rightMargin=15*mm,
@@ -213,6 +219,7 @@ def generate_pdf(student_info, active_days, grid_rows, faculty_map={}):
     title_style = ParagraphStyle('Title2', parent=styles['Title'], fontSize=18, spaceAfter=6)
     info_style = ParagraphStyle('Info', parent=styles['Normal'], fontSize=11, spaceAfter=6)
     cell_style = ParagraphStyle('Cell', parent=styles['Normal'], fontSize=10, leading=14, spaceAfter=0, spaceBefore=0, alignment=TA_CENTER)
+    day_style = ParagraphStyle('DayCell', parent=cell_style, fontSize=11, fontName='Helvetica-Bold')
 
     elements = []
     title = f"Class Routine - {student_info['semester']}"
@@ -227,20 +234,18 @@ def generate_pdf(student_info, active_days, grid_rows, faculty_map={}):
         buf.seek(0)
         return buf
 
-    header = ['Time'] + [DAY_SHORT.get(d, d[:3]) for d in active_days]
+    time_labels = [f"{ts[0]} - {ts[1]}" for ts in time_slots]
+    header = ['Day / Time'] + time_labels
     table_data = [header]
 
     page_w = landscape(A4)[0]
     available = page_w - 30*mm
 
     from reportlab.pdfbase.pdfmetrics import stringWidth
-    time_max_w = max(stringWidth(f"{r['start']} - {r['end']}", 'Helvetica', 10) for r in grid_rows)
-    time_col_w = max(time_max_w + 14, 65)
-
-    day_max_w = max(stringWidth(DAY_SHORT.get(d, d[:3]), 'Helvetica-Bold', 11) for d in active_days)
+    day_name_max_w = max(stringWidth(d, 'Helvetica-Bold', 11) for d in active_days)
     for row in grid_rows:
-        for day in active_days:
-            c = row['courses'].get(day)
+        for ts in time_slots:
+            c = row['courses'].get(ts)
             if c:
                 cw = stringWidth(f"{c['course']}", 'Helvetica-Bold', 10)
                 sec = c.get('sec', '')
@@ -252,23 +257,27 @@ def generate_pdf(student_info, active_days, grid_rows, faculty_map={}):
                         sec_line += f"({f})"
                 sw = stringWidth(sec_line, 'Helvetica', 10) if sec_line else 0
                 rw = stringWidth(c['room'], 'Helvetica', 10)
-                day_max_w = max(day_max_w, cw, sw, rw)
-    day_col_w = min(max(day_max_w + 14, 110), int((available - time_col_w) / len(active_days)))
-    if len(active_days) * day_col_w + time_col_w > available:
-        day_col_w = int((available - time_col_w) / len(active_days))
-    if day_col_w < 90:
-        day_col_w = 90
-        time_col_w = int(available - day_col_w * len(active_days))
-        if time_col_w < 50:
-            time_col_w = 50
-            day_col_w = int((available - 50) / len(active_days))
+                day_name_max_w = max(day_name_max_w, cw, sw, rw)
+    day_col_w = max(day_name_max_w + 14, 90)
 
-    col_widths = [time_col_w] + [day_col_w] * len(active_days)
+    time_max_w = max(stringWidth(tl, 'Helvetica-Bold', 11) for tl in time_labels)
+    time_col_w = max(time_max_w + 14, 80)
+
+    if len(time_slots) * time_col_w + day_col_w > available:
+        time_col_w = int((available - day_col_w) / len(time_slots))
+    if time_col_w < 60:
+        time_col_w = 60
+        day_col_w = int(available - time_col_w * len(time_slots))
+        if day_col_w < 50:
+            day_col_w = 50
+            time_col_w = int((available - 50) / len(time_slots))
+
+    col_widths = [day_col_w] + [time_col_w] * len(time_slots)
 
     for row in grid_rows:
-        row_vals = [Paragraph(f"{row['start']} - {row['end']}", cell_style)]
-        for day in active_days:
-            c = row['courses'].get(day)
+        row_vals = [Paragraph(row['day'], day_style)]
+        for ts in time_slots:
+            c = row['courses'].get(ts)
             if c:
                 row_vals.append(Paragraph(make_cell_text(c, faculty_map), cell_style))
             else:
@@ -278,8 +287,8 @@ def generate_pdf(student_info, active_days, grid_rows, faculty_map={}):
     table = Table(table_data, colWidths=col_widths, repeatRows=1)
 
     style_cmds = [
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1a73e8')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('BACKGROUND', (0, 0), (0, 0), colors.HexColor('#1a73e8')),
+        ('TEXTCOLOR', (0, 0), (0, 0), colors.white),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, 0), 11),
         ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
@@ -287,14 +296,22 @@ def generate_pdf(student_info, active_days, grid_rows, faculty_map={}):
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')]),
         ('TOPPADDING', (0, 0), (-1, -1), 6),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
     ]
 
-    for i, day in enumerate(active_days, 1):
-        day_color = DAY_COLORS.get(day, '#FFFFFF')
-        style_cmds.append(('BACKGROUND', (i, 1), (i, -1), colors.HexColor(day_color)))
+    for i in range(len(time_slots)):
+        col = i + 1
+        c = COLORS_DARK[i % len(COLORS_DARK)]
+        style_cmds.append(('BACKGROUND', (col, 0), (col, 0), colors.HexColor(c)))
+        style_cmds.append(('TEXTCOLOR', (col, 0), (col, 0), colors.HexColor('#333333')))
+
+    style_cmds.append(('BACKGROUND', (0, 1), (0, -1), colors.HexColor('#BBDEFB')))
+    style_cmds.append(('TEXTCOLOR', (0, 1), (0, -1), colors.HexColor('#333333')))
+    for i in range(len(time_slots)):
+        col = i + 1
+        c = COLORS_LIGHT[i % len(COLORS_LIGHT)]
+        style_cmds.append(('BACKGROUND', (col, 1), (col, -1), colors.HexColor(c)))
 
     table.setStyle(TableStyle(style_cmds))
     elements.append(table)
@@ -303,32 +320,54 @@ def generate_pdf(student_info, active_days, grid_rows, faculty_map={}):
     return buf
 
 
-def generate_image(student_info, active_days, grid_rows, faculty_map={}):
+def generate_image(student_info, active_days, time_slots, grid_rows, faculty_map={}):
     if not active_days:
         buf = io.BytesIO()
         Image.new('RGB', (600, 200), 'white').save(buf, 'PNG')
         buf.seek(0)
         return buf
 
-    try:
-        font_bold = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)
-        font_header = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 14)
-        font_course = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 13)
-        font_sec = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 11)
-        font_room = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 11)
-        font_time = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 11)
-        font_info = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 13)
-    except Exception:
+    def load_font(path, size):
+        try:
+            return ImageFont.truetype(path, size)
+        except Exception:
+            return None
+
+    font_paths = [
+        ("C:/Windows/Fonts/arialbd.ttf", "C:/Windows/Fonts/arial.ttf"),
+        ("C:/Windows/Fonts/segoeuib.ttf", "C:/Windows/Fonts/segoeui.ttf"),
+        ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+    ]
+
+    font_bold = font_header = font_course = font_day = None
+    font_sec = font_room = font_info = None
+    for bold_path, regular_path in font_paths:
+        fb = load_font(bold_path, 18)
+        if fb:
+            font_bold = fb
+            font_header = load_font(bold_path, 14)
+            font_course = load_font(bold_path, 13)
+            font_day = load_font(bold_path, 13)
+            font_sec = load_font(regular_path, 11)
+            font_room = load_font(regular_path, 11)
+            font_info = load_font(regular_path, 13)
+            break
+
+    if not font_bold:
         fonts = [ImageFont.load_default()] * 7
-        font_bold, font_header, font_course, font_sec, font_room, font_time, font_info = fonts
+        font_bold, font_header, font_course, font_sec, font_room, font_day, font_info = fonts
 
     tmp_img = Image.new('RGB', (1, 1))
     meas = ImageDraw.Draw(tmp_img)
 
     pad = 12
-    line_gap = 4
-    max_time_w = max(meas.textbbox((0, 0), f"{r['start']} - {r['end']}", font=font_time)[2] for r in grid_rows)
-    time_col_w = max(max_time_w + pad * 2, 80)
+    time_labels = [f"{ts[0]} - {ts[1]}" for ts in time_slots]
+
+    day_name_max_w = max(meas.textbbox((0, 0), d, font=font_day)[2] for d in active_days)
+    day_col_w = max(day_name_max_w + pad * 2, 90)
+
+    time_header_w = max(meas.textbbox((0, 0), tl, font=font_header)[2] for tl in time_labels)
+    time_col_w = max(time_header_w + pad * 2, 80)
 
     def make_sec_line(c, faculty_map):
         sec = c.get('sec', '')
@@ -341,7 +380,6 @@ def generate_image(student_info, active_days, grid_rows, faculty_map={}):
         return s
 
     def cell_lines(c, faculty_map, max_w):
-        course_w = meas.textbbox((0, 0), c['course'], font=font_course)[2]
         lines = [('course', c['course'])]
         sec_line = make_sec_line(c, faculty_map)
         if sec_line:
@@ -364,30 +402,25 @@ def generate_image(student_info, active_days, grid_rows, faculty_map={}):
                 lines.append(('room', current))
         return lines
 
-    day_col_w = 0
-    for day in active_days:
-        dw = meas.textbbox((0, 0), DAY_SHORT.get(day, day[:3]), font=font_header)[2]
-        day_col_w = max(day_col_w, dw)
     for row in grid_rows:
-        for day in active_days:
-            c = row['courses'].get(day)
+        for ts in time_slots:
+            c = row['courses'].get(ts)
             if c:
                 for ltype, text in cell_lines(c, faculty_map, 9999):
                     f = font_course if ltype == 'course' else (font_sec if ltype == 'sec' else font_room)
                     w = meas.textbbox((0, 0), text, font=f)[2]
-                    day_col_w = max(day_col_w, w)
-    day_col_w = min(max(day_col_w + pad * 2, 130), 260)
+                    time_col_w = max(time_col_w, w + pad * 2)
 
-    col_widths = [time_col_w] + [day_col_w] * len(active_days)
+    col_widths = [day_col_w] + [time_col_w] * len(time_slots)
     total_width = sum(col_widths)
 
     row_heights = []
     for row in grid_rows:
         max_h = 50
-        for day in active_days:
-            c = row['courses'].get(day)
+        for ts in time_slots:
+            c = row['courses'].get(ts)
             if c:
-                cls = cell_lines(c, faculty_map, day_col_w)
+                cls = cell_lines(c, faculty_map, time_col_w)
                 h = len(cls) * 22 + 10
                 max_h = max(max_h, h)
         row_heights.append(max_h)
@@ -407,13 +440,15 @@ def generate_image(student_info, active_days, grid_rows, faculty_map={}):
 
     x_start = 30
     x = x_start
-    draw.rectangle([x, y, x + total_width, y + header_height], fill='#1a73e8')
-    tx = x + (col_widths[0] - meas.textbbox((0, 0), 'Time', font=font_header)[2]) / 2
-    draw.text((tx, y + 11), 'Time', fill='white', font=font_header)
+    draw.rectangle([x, y, x + col_widths[0], y + header_height], fill='#1a73e8')
+    dx = x + (col_widths[0] - meas.textbbox((0, 0), 'Day', font=font_header)[2]) / 2
+    draw.text((dx, y + 11), 'Day / Time', fill='white', font=font_header)
     x += col_widths[0]
-    for day in active_days:
-        dx = x + (col_widths[1] - meas.textbbox((0, 0), DAY_SHORT.get(day, day[:3]), font=font_header)[2]) / 2
-        draw.text((dx, y + 11), DAY_SHORT.get(day, day[:3]), fill='white', font=font_header)
+    for i, tl in enumerate(time_labels):
+        c = COLORS_DARK[i % len(COLORS_DARK)]
+        draw.rectangle([x, y, x + col_widths[1], y + header_height], fill=c, outline='#CCCCCC')
+        dx2 = x + (col_widths[1] - meas.textbbox((0, 0), tl, font=font_header)[2]) / 2
+        draw.text((dx2, y + 11), tl, fill='#333333', font=font_header)
         x += col_widths[1]
 
     y += header_height
@@ -424,18 +459,16 @@ def generate_image(student_info, active_days, grid_rows, faculty_map={}):
     for ri, row in enumerate(grid_rows):
         rh = row_heights[ri]
         x = x_start
-        bg = '#F8F9FA' if ri % 2 == 0 else '#FFFFFF'
-        draw.rectangle([x, y, x + col_widths[0], y + rh], fill=bg, outline='#CCCCCC')
-        tw = meas.textbbox((0, 0), f"{row['start']} - {row['end']}", font=font_time)[2]
-        draw.text((x + (col_widths[0] - tw) / 2, y + (rh - 16) / 2), f"{row['start']} - {row['end']}", fill='#333333', font=font_time)
+        draw.rectangle([x, y, x + col_widths[0], y + rh], fill='#BBDEFB', outline='#CCCCCC')
+        dw = meas.textbbox((0, 0), row['day'], font=font_day)[2]
+        draw.text((x + (col_widths[0] - dw) / 2, y + (rh - 16) / 2), row['day'], fill='#333333', font=font_day)
         x += col_widths[0]
-
-        for day in active_days:
-            c = row['courses'].get(day)
-            day_color = DAY_COLORS.get(day, '#FFFFFF')
-            draw.rectangle([x, y, x + col_widths[1], y + rh], fill=day_color, outline='#CCCCCC')
+        for ci, ts in enumerate(time_slots):
+            c = row['courses'].get(ts)
+            col_color = COLORS_LIGHT[ci % len(COLORS_LIGHT)]
+            draw.rectangle([x, y, x + col_widths[1], y + rh], fill=col_color, outline='#CCCCCC')
             if c:
-                cls = cell_lines(c, faculty_map, day_col_w)
+                cls = cell_lines(c, faculty_map, time_col_w)
                 total_text_h = sum(line_heights.get(t, 18) for t, _ in cls)
                 cy = y + (rh - total_text_h) // 2
                 for ltype, text in cls:

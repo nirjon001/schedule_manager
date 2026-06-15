@@ -158,15 +158,19 @@ def build_grid(schedule):
                 time_ranges[key] = []
     time_ranges = OrderedDict(sorted(time_ranges.items(), key=lambda x: sort_time_key({'start': x[0][0]})))
 
-    grid_rows = []
-    for (start, end) in time_ranges:
-        row_data = {'start': start, 'end': end, 'courses': {}}
-        for day in active_days:
-            row_data['courses'][day] = None
-        for day, courses in schedule.items():
-            for c in courses:
-                if c['start'] == start and c['end'] == end:
-                    row_data['courses'][day] = c
-        grid_rows.append(row_data)
+    time_slots = list(time_ranges.keys())
 
-    return active_days, grid_rows
+    grid_rows = []
+    for day in active_days:
+        day_courses = {}
+        for c in schedule[day]:
+            day_courses[(c['start'], c['end'])] = c
+        row_courses = {}
+        for ts in time_slots:
+            row_courses[ts] = day_courses.get(ts)
+        grid_rows.append({
+            'day': day,
+            'courses': row_courses
+        })
+
+    return active_days, time_slots, grid_rows

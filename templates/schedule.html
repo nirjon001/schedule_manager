@@ -39,19 +39,21 @@
                 <table class="grid-table">
                     <thead>
                         <tr>
-                            <th class="time-col-head">Time</th>
-                            {% for day in active_days %}
-                                <th class="day-col-head day-head-{{ day|lower }}">{{ day }}</th>
+                            <th class="day-col-head">Day / Time</th>
+                            {% for ts in time_slots %}
+                                {% set bg = colors_dark[loop.index0 % (colors_dark | length)] %}
+                                <th class="time-col-head" style="background: {{ bg }}; color: #333;">{{ ts[0] }} - {{ ts[1] }}</th>
                             {% endfor %}
                         </tr>
                     </thead>
                     <tbody>
                         {% for row in grid_rows %}
                             <tr>
-                                <td class="time-col">{{ row.start }} - {{ row.end }}</td>
-                                {% for day in active_days %}
-                                    {% set course = row.courses.get(day) %}
-                                    <td class="day-col day-cell-{{ day|lower }}">
+                                <td class="day-name-col">{{ row.day }}</td>
+                                {% for ts in time_slots %}
+                                    {% set course = row.courses.get(ts) %}
+                                    {% set bg = colors_light[loop.index0 % (colors_light | length)] %}
+                                    <td class="day-col" style="background: {{ bg }};">
                                         {% if course %}
                                             <div class="course-block" data-course="{{ course.course }}">
                                                 <span class="course-code">{{ course.course }}</span>

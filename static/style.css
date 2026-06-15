@@ -213,6 +213,17 @@ th.day-col-head {
     height: 60px;
 }
 
+.day-name-col {
+    background: #BBDEFB;
+    color: #333;
+    font-weight: 700;
+    font-size: 13px;
+    text-align: center !important;
+    vertical-align: middle;
+    border: 1px solid #d0d5dd;
+    white-space: nowrap;
+}
+
 .course-block {
     display: flex;
     flex-direction: column;
