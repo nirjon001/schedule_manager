@@ -31,6 +31,8 @@ python app.py
 
 Open `http://localhost:5000` in a browser. Upload an advising slip Excel file to generate the schedule.
 
+**Live demo:** [https://schedule-manager-19y6.onrender.com](https://schedule-manager-19y6.onrender.com)
+
 For debug mode:
 
 ```bash
