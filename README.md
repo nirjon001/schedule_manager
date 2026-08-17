@@ -1,78 +1,102 @@
-# Schedule Manager
+<div align="center">
 
-A Flask web application that parses university advising Excel files (.xlsx/.xls) and generates an interactive class routine schedule with PDF and PNG export.
+# 🗓️ Schedule Manager
 
-## Features
+Turn your university advising slip into a beautiful class routine — in seconds.
 
-- Upload university advising slips (Excel format)
-- Auto-detects courses, sections, time slots, rooms, and days
-- Interactive schedule grid with live clock and current class highlighting
-- Faculty initials input — displayed inline and embedded in exports
-- Download schedule as PDF (ReportLab)
-- Download schedule as PNG (Pillow)
-- Auto-cleanup of uploaded files (30 min TTL)
+![Python](https://img.shields.io/badge/Python-3.11-blue)
+![Framework](https://img.shields.io/badge/Framework-Flask-000000)
+![License](https://img.shields.io/badge/License-MIT-green)
+![Platform](https://img.shields.io/badge/Deploy-Render-46e3b7)
 
-## Requirements
+[**▶ Live Demo**](https://schedule-manager-0fsd.onrender.com) &nbsp;·&nbsp; [Deploy on Render](https://render.com/deploy?repo=https://github.com/nirjon001/schedule_manager)
 
-- Python 3.9+
-- Dependencies listed in `requirements.txt`
+</div>
 
-## Installation
+---
+
+A Flask web app that parses university **advising slip Excel files** (`.xlsx` / `.xls`) and generates an **interactive class routine** — with one-click **PDF** and **PNG** export. No accounts, no databases, no setup: upload, and go.
+
+## ✨ Features
+
+- 📤 Upload university advising slips (Excel format)
+- 🧠 Auto-detects **courses, sections, time slots, rooms, and days** (column positions are detected dynamically — no hardcoded layouts)
+- 🗓️ Interactive schedule grid with a **live clock** and **current/next class** highlighting
+- 👨‍🏫 Faculty initials input — shown inline on the grid and embedded into exports
+- 📄 Download your routine as **PDF** (ReportLab)
+- 🖼️ Download your routine as **PNG** (Pillow)
+- 🧹 Auto-cleanup of uploaded files (30-minute TTL)
+
+## 🚀 Quick Start
 
 ```bash
 pip install -r requirements.txt
-```
-
-## Usage
-
-```bash
 python app.py
 ```
 
-Open `http://localhost:5000` in a browser. Upload an advising slip Excel file to generate the schedule.
-
-**Live demo:** [https://schedule-manager-19y6.onrender.com](https://schedule-manager-19y6.onrender.com)
-
-For debug mode:
+Open `http://localhost:5000` in your browser, upload your advising slip, and watch the routine generate. Debug mode:
 
 ```bash
 python app.py --debug
 ```
 
-## Expected Excel Format
+## ☁️ Deploy to Render
+
+This repo ships with a `render.yaml` **Blueprint** — deploy in one click:
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/nirjon001/schedule_manager)
+
+Or create a service manually:
+
+| Setting | Value |
+|---------|-------|
+| Build command | `pip install -r requirements.txt` |
+| Start command | `gunicorn app:app` |
+| Runtime | Python |
+
+## 📋 Expected Excel Format
 
 The parser reads a standard university advising slip with columns for:
 
 | Column | Description |
 |--------|-------------|
-| Course(s) | Course code (e.g. `CSE101`) |
-| Sec | Section number |
-| Time-WeekDay | Format: `STWRF 8:00AM-10:00AM` (day codes: S=Sun, M=Mon, T=Tue, W=Wed, R=Thu, F=Fri, A=Sat) |
-| Room | Room number |
+| **Course(s)** | Course code (e.g. `CSE101`) |
+| **Sec** | Section number |
+| **Time-WeekDay** | Format: `STWRF 8:00AM-10:00AM` (day codes: `S`=Sun, `M`=Mon, `T`=Tue, `W`=Wed, `R`=Thu, `F`=Fri, `A`=Sat) |
+| **Room** | Room number |
 
-Student name and ID are auto-extracted from cells labeled `Name:` and `ID#`.
+Student **name** and **ID** are auto-extracted from cells labeled `Name:` and `ID#`.
 
-## Project Structure
+## 📁 Project Structure
 
 ```
 schedule_manager/
-├── app.py              # Flask application & PDF/PNG generation
+├── app.py              # Flask app, routes & PDF/PNG generation
 ├── scheduler.py        # Excel parsing & grid building logic
+├── render.yaml         # Render Blueprint (one-click deploy)
 ├── requirements.txt    # Python dependencies
 ├── static/
 │   └── style.css       # Stylesheet
 ├── templates/
 │   ├── index.html      # Upload page
-│   └── schedule.html   # Schedule display with live features
+│   └── schedule.html   # Interactive schedule view
 └── uploads/            # Temporary uploaded files (auto-cleaned)
 ```
 
-## Tech Stack
+## 🛠️ Tech Stack
 
-- **Backend:** Flask, openpyxl, ReportLab, Pillow
-- **Frontend:** Vanilla JavaScript, CSS
-- **Export:** PDF (ReportLab), PNG (Pillow)
+- **Backend:** Flask · openpyxl · ReportLab · Pillow
+- **Frontend:** Vanilla JavaScript · CSS
+- **Deployment:** Render (Blueprint / gunicorn)
 
-## Author
+## 📜 License
 
-Developed by Ratul Hasan Nirjon
+Released under the [MIT License](LICENSE).
+
+---
+
+<div align="center">
+
+Developed with 💙 by **Ratul Hasan Nirjon**
+
+</div>
