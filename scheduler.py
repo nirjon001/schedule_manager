@@ -51,6 +51,18 @@ def parse_excel(filepath):
 
     student_info = {'name': '', 'id': '', 'semester': ''}
 
+    header_cols = {}
+    for row in ws.iter_rows(min_row=1, max_row=ws.max_row, values_only=False):
+        for cell in row:
+            v = str(cell.value or '').strip()
+            if v in ('Course(s)', 'Sec', 'Time-WeekDay', 'Room') and v not in header_cols:
+                header_cols[v] = cell.column
+
+    col_course = header_cols.get('Course(s)', 3)
+    col_sec = header_cols.get('Sec', 17)
+    col_time = header_cols.get('Time-WeekDay', 53)
+    col_room = header_cols.get('Room', 65)
+
     for row in ws.iter_rows(min_row=1, max_row=ws.max_row, values_only=False):
         for cell in row:
             val = cell.value
@@ -84,16 +96,14 @@ def parse_excel(filepath):
     for row in ws.iter_rows(min_row=1, max_row=ws.max_row, values_only=False):
         row_vals = {c.column: c.value for c in row}
 
-        if any(str(row_vals.get(c, '') or '').strip() == 'Course(s)' for c in [3, 4, 5, 6, 7]):
+        if str(row_vals.get(col_course, '') or '').strip() == 'Course(s)':
             in_course_section = True
             continue
 
         if not in_course_section:
             continue
 
-        course_cell = row_vals.get(3)
-        if not course_cell:
-            course_cell = row_vals.get(4) or row_vals.get(5)
+        course_cell = row_vals.get(col_course)
         if not course_cell:
             continue
 
@@ -101,9 +111,9 @@ def parse_excel(filepath):
         if not re.match(r'^[A-Z]{3}\d{3}', course_str) and not re.match(r'^[A-Z]{3}\d{3}\s+Lab', course_str):
             continue
 
-        time_day_val = str(row_vals.get(53, '') or '').strip()
-        room_val = str(row_vals.get(65, '') or '').strip()
-        sec_val = str(row_vals.get(17, '') or '').strip()
+        time_day_val = str(row_vals.get(col_time, '') or '').strip()
+        room_val = str(row_vals.get(col_room, '') or '').strip()
+        sec_val = str(row_vals.get(col_sec, '') or '').strip()
 
         if not time_day_val or not re.match(r'[ASMTWRF]+\s+\d{1,2}:\d{2}(?:AM|PM)-\d{1,2}:\d{2}(?:AM|PM)', time_day_val):
             continue
